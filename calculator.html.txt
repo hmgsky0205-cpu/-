@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>표준 진척률 계산기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Style for the calendar days for selecting holidays */
+        .day {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 3rem;
+            height: 3rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        .day.selected {
+            background-color: #3b82f6 !important;
+            color: white;
+            font-weight: bold;
+        }
+        .day:hover:not(.past):not(.today) {
+            background-color: #e5e7eb;
+            transform: scale(1.05);
+        }
+        .day.past {
+            color: #9ca3af;
+        }
+        .day.today {
+            border: 2px solid #2563eb;
+            background-color: #dbeafe;
+        }
+        .day.sunday {
+            color: #ef4444;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-8 rounded-2xl shadow-xl max-w-2xl w-full">
+        <!-- Title and description -->
+        <h1 class="text-3xl font-bold text-center mb-2 text-gray-800">충북팀 표준 진척률 계산기</h1>
+        <p class="text-center text-gray-600 mb-2 text-sm">
+            <!-- Styling for the quote part -->
+            <span id="quote" class="font-bold text-lg text-blue-600 italic"></span>
+            <br>
+            <span id="author" class="text-sm text-gray-500"></span>
+        </p>
+        <p class="text-center text-gray-600 mb-8 text-sm">
+            ☎️문의 충주사무실 / 홍민기 / 010-7600-7274
+        </p>
+
+        <!-- Calculation results section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 text-center">
+            <div class="bg-blue-50 p-4 rounded-lg shadow-sm">
+                <p class="text-blue-800 text-sm font-semibold mb-1">당월 전체일수</p>
+                <p id="totalDays" class="text-2xl font-bold text-blue-600">0일</p>
+            </div>
+            <div class="bg-blue-50 p-4 rounded-lg shadow-sm">
+                <p class="text-blue-800 text-sm font-semibold mb-1">당월 개통가능</p>
+                <p id="totalBusinessDays" class="text-2xl font-bold text-blue-600">0일</p>
+            </div>
+            <div class="bg-blue-50 p-4 rounded-lg shadow-sm">
+                <p class="text-blue-800 text-sm font-semibold mb-1">전일기준 개통가능</p>
+                <p id="pastBusinessDays" class="text-2xl font-bold text-blue-600">0일</p>
+            </div>
+            <div class="bg-green-100 p-4 rounded-lg shadow-md border-l-4 border-green-500">
+                <p class="text-green-800 text-sm font-semibold mb-1">표준 진척률</p>
+                <p id="progressRate" class="text-3xl font-bold text-green-700">0%</p>
+            </div>
+        </div>
+
+        <!-- Additional holiday selection section -->
+        <div class="bg-gray-50 p-6 rounded-2xl shadow-inner">
+            <h2 class="text-lg font-bold text-gray-800 mb-4">이번달 개통불가일 추가선택 (설/추석 당일 등)</h2>
+            <div id="calendarContainer" class="flex justify-center mb-4">
+                <div class="calendar w-full">
+                    <!-- Calendar header -->
+                    <div class="flex justify-between items-center mb-4">
+                        <span id="calendarTitle" class="text-lg font-semibold text-gray-700"></span>
+                    </div>
+                    <!-- Weekday header -->
+                    <div class="grid grid-cols-7 text-center text-sm font-medium text-gray-500 mb-2">
+                        <span class="text-red-500">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="text-red-500">토</span>
+                    </div>
+                    <!-- Date grid -->
+                    <div id="calendarGrid" class="grid grid-cols-7 gap-1"></div>
+                </div>
+            </div>
+            <p class="text-sm text-gray-500 text-center">설/추석 당일 등 특수한 개통불가일만 눌러주세요</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = today.getMonth();
+
+            const totalDaysEl = document.getElementById('totalDays');
+            const totalBusinessDaysEl = document.getElementById('totalBusinessDays');
+            const pastBusinessDaysEl = document.getElementById('pastBusinessDays');
+            const progressRateEl = document.getElementById('progressRate');
+            const calendarTitleEl = document.getElementById('calendarTitle');
+            const calendarGridEl = document.getElementById('calendarGrid');
+            const quoteEl = document.getElementById('quote');
+            const authorEl = document.getElementById('author');
+            
+            let selectedHolidays = [];
+            
+            // List of random quotes. The quote and author are separated.
+            const quotes = [
+                { quote: "“보스는 길을 가고, 리더는 길을 보여준다.”", author: "존 맥스웰(John C. Maxwell)" },
+                { quote: "“스스로를 경영하라. 그렇지 않으면 누군가가 당신을 경영할 것이다.”", author: "잭 웰치(Jack Welch)" },
+                { quote: "“성장은 불편함 속에서 나온다.”", author: "리드 호프먼(Reid Hoffman)" },
+                { quote: "“가장 좋은 시간은 바로 지금이다.”", author: "오프라 윈프리(Oprah Winfrey)" },
+                { quote: "“시간은 짧지 않다. 다만 허비할 뿐이다.”", author: "세네카(Seneca)" },
+                { quote: "“물이 바위를 뚫을 수 있는건 힘 때문이 아니다.”", author: "오비디우스(Ovid)" },
+                { quote: "“바람의 방향을 바꿀 수 없어도, 돛의 방향은 바꿀 수 있지 않은가.”", author: "지미 딘(Jimmy Dean)" },
+                { quote: "“흐르는 물은 같은 물이 아니다.”", author: "헤라클레이토스(Heraclitus)" },
+                { quote: "“안전지대가 가장 위험한 곳이 될 수 있다.”", author: "세스 고딘(Seth Godin)" },
+                { quote: "“배를 항구에만 두면 안전하지만, 그것은 배의 존재 이유가 아니다.”", author: "알베르 카뮈(Albert Camus)" },
+                { quote: "“위기는 조용할 때 자란다.”", author: "헨리 키신저(Henry Kissinger)" },
+                { quote: "“모른다는 것을 아는 것이 지혜의 시작이다.”", author: "소크라테스(Socrates)" },
+                { quote: "“가장 강한 자가 아니라, 가장 적응하는 자가 살아남는다.”", author: "찰스 다윈(Charles Darwin)" },
+                { quote: "“정보는 넘치지만, 지혜는 부족하다.”", author: "앨빈 토플러(Alvin Toffler)" },
+                { quote: "“스스로 속이지 마라, 가장 속이기 쉬운 대상은 자기 자신이다.”", author: "리처드 페이먼(Richard P. Feynman)" },
+                { quote: "“사람은 주어진 목표까지 성장하지 않는다. 시스템의 수준으로 맞춰질 뿐이다.”", author: "제임스 클리어(James Clear) " },
+                { quote: "“빨리 가고 싶으면 혼자 가고, 멀리 가고 싶으면 함께 가라.”", author: "아프리카 속담" },
+                { quote: "“유능한 판매원은 자신의 전문성이 때로는 판매의 독이 될 수 있음을 안다.”", author: "마이크 보스워스(Mike Bosworth)" },
+                { quote: "“영업에서의 자기소개는 인사가 아닌, 고객의 저항의 문을 여는 작업이다.”", author: "보 베넷(Bo Bennett)" },
+                { quote: "“이 고객을 챙기지 않으면, 언젠가 경쟁자가 챙긴다.”", author: "밥 후이(Bob Hooey)" },
+                { quote: "“판매성사 여부는 고객이 결정하는 것이 아니라, 판매원의 태도가 결정한다.”", author: "W. 클레멘트 스톤(W. Clement Stone)" },
+                { quote: "“판매에서 고객의 서명은 판매의 끝이 아닌, 관계의 시작임을 명심하라.”", author: "패트리샤 프립(Patricia Fripp)" },
+                { quote: "“고객의 거절은 거부가 아니라, 더 많은 정보를 요구하는 것이다.”", author: "브라이언 트레이시(Brian Tracy)" },
+                { quote: "“상품의 가격은 회사의 양복쟁이들이 아니라, 그 값을 지불하는 고객이 결정한다.”", author: "사이먼 시넥(Simon Sinek)" },
+                { quote: "“팔지 마라, 다만 도움을 줘라.”", author: "지그 지글러(Zig Ziglar)" },
+                { quote: "“영업은 당신이 어떤 말을 하냐에 달려있지 않다, 고객이 당신을 믿느냐에 달려있다.”", author: "질 콘래스(Jill Konrath)" },
+                { quote: "“사람들은 제품을 사는 게 아니라, 더 나은 자신을 산다.”", author: "미하일 콘(Mikhail Khon)" },
+                { quote: "“유능한 판매사는 자신이 말할 때가 아닌, 들을 때 더 집중한다.”", author: "미하일 콘(Mikhail Khon)" },
+                { quote: "“계약 성사의 50%는 첫인상에서 결정난다.”", author: "낸시 블리크(Nancy Bleeke)" },
+                { quote: "“고객은 당신에게 완벽을 기대하지 않는다. 다만 문제가 생겼을 때 해결해주길 기대한다.”", author: "도널드 포터(Donald Porter)" },
+                { quote: "“과거 경쟁은 도로 건너편 거리였다면, 앞으로의 경쟁은 클릭 한 번 거리다.”", author: "더그 워너(Doug Warner)" },
+                { quote: "“고객은 당신의 화려한 제안이 아닌, 당신이 던지는 질문에 설득된다.”", author: "작자 미상(Unknown)" },
+                { quote: "“재구매는 유도하는 것이지만, 충성심은 얻어내는 것이다.”", author: "재닛 로빈슨(Janet Robinson)" },
+                { quote: "“고객은 당신이 얼마나 아는지보다, 얼마나 신경 써주는지를 본다.”", author: "데이먼 리처즈(Damon Richards)" },
+                { quote: "“고객이 당신과 거래하기 쉽도록 만들수록, 거래는 늘어난다.”", author: "바바라 코코런(Barbara Corcoran)" },
+                { quote: "“중요한 건 고객에게 전화하는 게 아니라, 고객이 당신에게 전화하게 만드는 것이다.”", author: "제프리 기토머(Jeffrey Gitomer)" },
+                { quote: "“오늘날의 리더십은 권위가 아닌, 영향력에 있다.”", author: "켄 블랜차드(Ken Blanchard)" },
+                { quote: "“기회는 생기는 것이 아니라, 스스로 만들어내는 것이다.”", author: "크리스 그로서(Chris Grosser)" },
+                { quote: "“제품의 품질은 가격보다도 오래 기억된다.”", author: "알도 구치(Aldo Gucci)" },
+                { quote: "“만족한 고객이 곧 최고의 광고다.”", author: "필립 코틀러(Philip Kotler)" },
+                { quote: "“영업은 프레젠테이션이 아니라 대화다.”", author: "작자 미상(Unknown)" },
+                { quote: "“자신을 파는 첫걸음은 약속을 지키는 것이다.”", author: "작자 미상(Unknown)" }
+            ];
+
+            /**
+             * Calculates the total number of days in a given month.
+             * @param {number} y - The year.
+             * @param {number} m - The month (0-11).
+             * @returns {number} The total number of days in the month.
+             */
+            function getDaysInMonth(y, m) {
+                return new Date(y, m + 1, 0).getDate();
+            }
+
+            /**
+             * Renders the calendar UI and handles events.
+             */
+            function renderCalendar() {
+                calendarGridEl.innerHTML = '';
+                calendarTitleEl.textContent = `${year}년 ${month + 1}월`;
+
+                const daysInMonth = getDaysInMonth(year, month);
+                const firstDayOfWeek = new Date(year, month, 1).getDay(); // 0(Sunday) - 6(Saturday)
+                
+                // Add empty spaces for days before the 1st
+                for (let i = 0; i < firstDayOfWeek; i++) {
+                    const emptyDiv = document.createElement('div');
+                    calendarGridEl.appendChild(emptyDiv);
+                }
+
+                // Create date elements
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dayEl = document.createElement('div');
+                    const currentDate = new Date(year, month, day);
+                    const isSunday = currentDate.getDay() === 0;
+                    const isPast = currentDate < today;
+
+                    dayEl.textContent = day;
+                    dayEl.classList.add('day');
+
+                    // Sundays cannot be selected
+                    if (isSunday) {
+                        dayEl.classList.add('sunday');
+                        dayEl.style.cursor = 'not-allowed';
+                    }
+                    
+                    if (isPast) {
+                        dayEl.classList.add('past');
+                    }
+                    
+                    // Highlight today's date
+                    if (currentDate.getDate() === today.getDate() && currentDate.getMonth() === today.getMonth()) {
+                        dayEl.classList.add('today');
+                    }
+
+                    // Highlight selected holidays
+                    const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    if (selectedHolidays.includes(dateString)) {
+                        dayEl.classList.add('selected');
+                    }
+
+                    // Click event listener
+                    if (!isSunday) {
+                        dayEl.addEventListener('click', () => {
+                            const index = selectedHolidays.indexOf(dateString);
+                            if (index > -1) {
+                                // Deselect if already selected
+                                selectedHolidays.splice(index, 1);
+                                dayEl.classList.remove('selected');
+                            } else {
+                                // Allow up to 5 selections
+                                if (selectedHolidays.length < 5) {
+                                    selectedHolidays.push(dateString);
+                                    dayEl.classList.add('selected');
+                                } else {
+                                    alert('최대 5개의 날짜만 선택할 수 있습니다.');
+                                }
+                            }
+                            updateCalculations();
+                        });
+                    }
+
+                    calendarGridEl.appendChild(dayEl);
+                }
+            }
+
+            /**
+             * Performs all calculations and updates the UI.
+             */
+            function updateCalculations() {
+                const todayForCalc = new Date();
+                todayForCalc.setHours(0, 0, 0, 0); // Reset time for date comparison
+
+                // 1. Total days in the current month
+                const totalDaysInMonth = getDaysInMonth(year, month);
+
+                // 2. Number of Sundays in the current month
+                let sundaysInMonth = 0;
+                for (let i = 1; i <= totalDaysInMonth; i++) {
+                    const d = new Date(year, month, i);
+                    if (d.getDay() === 0) {
+                        sundaysInMonth++;
+                    }
+                }
+
+                // 3. Number of selected holidays in the current month
+                const selectedHolidaysInMonth = selectedHolidays.length;
+
+                // 4. Total business days in the current month
+                const totalBusinessDaysInMonth = totalDaysInMonth - sundaysInMonth - selectedHolidaysInMonth;
+                
+                // 5. Number of days from the 1st of the month to yesterday
+                const yesterday = new Date(today);
+                yesterday.setDate(today.getDate() - 1);
+                const pastDays = yesterday.getDate();
+
+                // 6. Non-business days until yesterday (Sundays + selected holidays)
+                let pastNonBusinessDays = 0;
+                for (let i = 1; i <= pastDays; i++) {
+                    const d = new Date(year, month, i);
+                    const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                    // Check if it's a Sunday or a selected holiday
+                    if (d.getDay() === 0 || selectedHolidays.includes(dateString)) {
+                        pastNonBusinessDays++;
+                    }
+                }
+
+                // 7. Business days until yesterday
+                const pastBusinessDays = pastDays - pastNonBusinessDays;
+
+                // 8. Final progress rate calculation
+                let progressRate = 0;
+                if (totalBusinessDaysInMonth > 0) {
+                    progressRate = Math.round((pastBusinessDays / totalBusinessDaysInMonth) * 100);
+                }
+
+                // Update UI
+                totalDaysEl.textContent = `${totalDaysInMonth}일`;
+                totalBusinessDaysEl.textContent = `${totalBusinessDaysInMonth}일`;
+                pastBusinessDaysEl.textContent = `${pastBusinessDays}일`;
+                progressRateEl.textContent = `${progressRate}%`;
+            }
+
+            /**
+             * Displays a random quote on page load.
+             */
+            function displayRandomQuote() {
+                const randomIndex = Math.floor(Math.random() * quotes.length);
+                const selectedQuote = quotes[randomIndex];
+                quoteEl.textContent = selectedQuote.quote;
+                authorEl.textContent = selectedQuote.author;
+            }
+
+            // Initial execution
+            displayRandomQuote();
+            renderCalendar();
+            updateCalculations();
+        });
+    </script>
+</body>
+</html>
